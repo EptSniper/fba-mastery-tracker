@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useMemo, useCallback } from "react";
+import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { Video, VideoStatus, VideoDifficulty, VideoSourceType } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -231,16 +232,18 @@ function ResourceCard({ video, onStatusChange, onViewDetails, onEdit }: {
 
         {/* Actions */}
         <div className="flex gap-1.5 mt-auto">
-          {video.link ? (
-            <a href={video.link} target="_blank" rel="noopener noreferrer" className="flex-1">
-              <Button size="sm" variant="outline" className="h-7 text-xs w-full">
-                <ExternalLink className="h-3 w-3" /> Open
+          <Link href={`/watch/${video.id}`} className="flex-1">
+            <Button size="sm" className="h-7 text-xs w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:opacity-90 text-white border-0">
+              <PlayCircle className="h-3 w-3" /> Watch
+            </Button>
+          </Link>
+          {video.link && (
+            <a href={video.link} target="_blank" rel="noopener noreferrer" title="Open on YouTube">
+              <Button size="sm" variant="ghost" className="h-7 text-xs px-2">
+                <ExternalLink className="h-3 w-3" />
               </Button>
             </a>
-          ) : <div className="flex-1" />}
-          <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => onViewDetails(video)}>
-            <BookOpen className="h-3 w-3" /> Notes
-          </Button>
+          )}
           <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => onEdit(video)}>
             Edit
           </Button>
@@ -338,14 +341,9 @@ function ThirtyDayPlanView({ videos, onStatusChange, onViewDetails, onEdit }: {
                               {STATUS_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                             </SelectContent>
                           </Select>
-                          {v.link && (
-                            <a href={v.link} target="_blank" rel="noopener noreferrer">
-                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0"><ExternalLink className="h-3 w-3" /></Button>
-                            </a>
-                          )}
-                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => onViewDetails(v)}>
-                            <BookOpen className="h-3 w-3" />
-                          </Button>
+                          <Link href={`/watch/${v.id}`} title="Watch + take notes">
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-violet-600"><PlayCircle className="h-3.5 w-3.5" /></Button>
+                          </Link>
                         </div>
                       </div>
                     ))
@@ -387,14 +385,9 @@ function ThirtyDayPlanView({ videos, onStatusChange, onViewDetails, onEdit }: {
                       <SelectTrigger className="h-6 text-xs w-[110px]"><SelectValue /></SelectTrigger>
                       <SelectContent>{STATUS_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
                     </Select>
-                    {v.link && (
-                      <a href={v.link} target="_blank" rel="noopener noreferrer">
-                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0"><ExternalLink className="h-3 w-3" /></Button>
-                      </a>
-                    )}
-                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => onViewDetails(v)}>
-                      <BookOpen className="h-3 w-3" />
-                    </Button>
+                    <Link href={`/watch/${v.id}`} title="Watch + take notes">
+                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-violet-600"><PlayCircle className="h-3.5 w-3.5" /></Button>
+                    </Link>
                   </div>
                 </div>
               ))}

@@ -88,3 +88,30 @@ export function truncate(str: string, length: number): string {
   if (str.length <= length) return str;
   return str.substring(0, length) + "...";
 }
+
+/**
+ * Extracts the 11-char YouTube video ID from a URL.
+ * Supports youtube.com/watch?v=ID, youtu.be/ID, m.youtube.com, /shorts/, /v/, and /embed/.
+ */
+export function getYouTubeId(url: string | undefined | null): string | null {
+  if (!url) return null;
+  const m = url.match(
+    /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+  );
+  return m ? m[1] : null;
+}
+
+export function getYouTubeEmbedUrl(url: string | undefined | null): string | null {
+  const id = getYouTubeId(url);
+  return id ? `https://www.youtube-nocookie.com/embed/${id}?rel=0&modestbranding=1` : null;
+}
+
+export function getYouTubeThumbnail(
+  url: string | undefined | null,
+  size: "default" | "hq" | "max" = "hq",
+): string | null {
+  const id = getYouTubeId(url);
+  if (!id) return null;
+  const map = { default: "default", hq: "hqdefault", max: "maxresdefault" };
+  return `https://img.youtube.com/vi/${id}/${map[size]}.jpg`;
+}

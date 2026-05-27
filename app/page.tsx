@@ -97,7 +97,7 @@ export default function HomePage() {
             <div className="mt-6 flex flex-wrap gap-3">
               {stats.nextUp ? (
                 <Link
-                  href="/videos"
+                  href={`/watch/${stats.nextUp.id}`}
                   className="inline-flex items-center gap-2 bg-white text-violet-700 px-5 py-2.5 rounded-xl font-semibold text-sm hover:scale-105 active:scale-95 transition shadow-lg"
                 >
                   <Play className="h-4 w-4 fill-current" />
@@ -225,17 +225,13 @@ export default function HomePage() {
                 )}
 
                 <div className="flex gap-2 mt-4">
-                  {stats.nextUp.link && (
-                    <a
-                      href={stats.nextUp.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white text-sm font-semibold hover:opacity-90 transition"
-                    >
-                      <Play className="h-3.5 w-3.5 fill-current" />
-                      Watch now
-                    </a>
-                  )}
+                  <Link
+                    href={`/watch/${stats.nextUp.id}`}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white text-sm font-semibold hover:opacity-90 transition"
+                  >
+                    <Play className="h-3.5 w-3.5 fill-current" />
+                    Watch + take notes
+                  </Link>
                   <Link
                     href="/videos"
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-muted text-foreground text-sm font-semibold hover:bg-muted/70 transition"

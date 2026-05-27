@@ -125,13 +125,13 @@ export const useStore = create<AppState>()(
 
       initializeData: () => {
         const state = get();
-        // v4 marker: deeply-researched curriculum w/ importance tags and Fields of Profit content.
-        // Day 4 is now the Fields of Profit "First $10k Profit" video — fingerprint on that.
-        const hasV4Seed = state.videos.some(
-          (v) => v.isSeeded && v.dayNumber === 4 && v.title?.includes("$10,000 PROFIT"),
+        // v5 marker: every seeded video now ships with a pre-written aiDescription.
+        // If Day 1's seeded video doesn't have aiDescription, we're on an older seed.
+        const hasV5Seed = state.videos.some(
+          (v) => v.isSeeded && v.dayNumber === 1 && typeof v.aiDescription === "string" && v.aiDescription.length > 100,
         );
         const userVideos = state.videos.filter((v) => !v.isSeeded);
-        if (!hasV4Seed) {
+        if (!hasV5Seed) {
           set({
             videos: [...SEED_VIDEOS, ...userVideos],
             flashcards: state.flashcards.length > 0 ? state.flashcards : SEED_FLASHCARDS,

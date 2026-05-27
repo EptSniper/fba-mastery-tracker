@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import {
   ArrowLeft, ExternalLink, CheckCircle2, Save, Target,
-  ChevronLeft, ChevronRight, Star, FileText, RefreshCw, Bot,
+  ChevronLeft, ChevronRight, Star, FileText, Bot,
 } from "lucide-react";
 import { cn, getYouTubeEmbedUrl, getYouTubeId } from "@/lib/utils";
 import { VideoStatus, Video } from "@/types";
@@ -66,60 +66,6 @@ export default function WatchPage() {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteIdRef = useRef<string | undefined>(existingNote?.id);
-
-  // ─── AI Description state ───────────────────────────────────────────────
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
-  const fetchAttemptedRef = useRef<string | null>(null);
-
-  const fetchAiDescription = useCallback(async (force = false) => {
-    if (!video) return;
-    if (!force && video.aiDescription) return;
-    if (!force && fetchAttemptedRef.current === video.id) return;
-    fetchAttemptedRef.current = video.id;
-
-    setAiLoading(true);
-    setAiError(null);
-    try {
-      const res = await fetch("/api/ai-coach", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "describe_video",
-          data: {
-            title: video.title,
-            channel: video.channel,
-            url: video.link,
-            category: video.category,
-            dayNumber: video.dayNumber,
-            weekNumber: video.weekNumber,
-            whatItTeaches: video.whatItTeaches,
-            whyIncluded: video.whyIncluded,
-          },
-        }),
-      });
-      const data = await res.json();
-      if (data.description) {
-        updateVideo(video.id, { aiDescription: data.description });
-      } else if (data.error) {
-        setAiError(data.error);
-      } else {
-        setAiError("No description returned");
-      }
-    } catch (e) {
-      setAiError(e instanceof Error ? e.message : "Failed to fetch");
-    } finally {
-      setAiLoading(false);
-    }
-  }, [video, updateVideo]);
-
-  // Auto-fetch description on first visit (only if not already cached)
-  useEffect(() => {
-    if (!video) return;
-    if (!video.aiDescription && !aiLoading) {
-      fetchAiDescription(false);
-    }
-  }, [video?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hydrate text when video/note loads
   useEffect(() => {
@@ -365,51 +311,15 @@ export default function WatchPage() {
               </div>
             </div>
 
-            {/* AI Description */}
+            {/* Description (pre-generated, baked into the seed) */}
             <div className="p-5 rounded-2xl bg-gradient-to-br from-violet-500/10 via-fuchsia-500/5 to-cyan-500/5 border border-violet-500/20">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-[10px] uppercase tracking-widest text-violet-600 dark:text-violet-300 font-bold flex items-center gap-1.5">
-                  <Bot className="h-3.5 w-3.5" /> Description
-                </div>
-                {video.aiDescription && !aiLoading && (
-                  <button
-                    onClick={() => fetchAiDescription(true)}
-                    className="text-[10px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1 transition"
-                    title="Regenerate description"
-                  >
-                    <RefreshCw className="h-3 w-3" /> regenerate
-                  </button>
-                )}
+              <div className="text-[10px] uppercase tracking-widest text-violet-600 dark:text-violet-300 font-bold flex items-center gap-1.5 mb-3">
+                <Bot className="h-3.5 w-3.5" /> Description
               </div>
 
-              {aiLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                  Generating description…
-                </div>
-              ) : video.aiDescription ? (
+              {video.aiDescription ? (
                 <div className="text-sm leading-relaxed whitespace-pre-wrap">
                   {video.aiDescription}
-                </div>
-              ) : aiError ? (
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    Couldn&apos;t generate AI description.{" "}
-                    {aiError.toLowerCase().includes("credit") && (
-                      <span>Your Anthropic account needs credits.</span>
-                    )}
-                  </p>
-                  {video.whatItTeaches && (
-                    <p className="text-sm leading-relaxed pt-2 border-t border-violet-500/20">
-                      {video.whatItTeaches}
-                    </p>
-                  )}
-                  <button
-                    onClick={() => fetchAiDescription(true)}
-                    className="text-xs text-violet-600 hover:text-violet-700 inline-flex items-center gap-1 mt-2"
-                  >
-                    <RefreshCw className="h-3 w-3" /> Try again
-                  </button>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">

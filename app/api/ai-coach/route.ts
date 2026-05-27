@@ -94,6 +94,38 @@ Give direct, practical advice. Focus on: boring profitable products (Office, Art
       return NextResponse.json({ result });
     }
 
+    if (action === "describe_video") {
+      const { title, channel, url, category, dayNumber, weekNumber, whatItTeaches, whyIncluded } = data;
+      const response = await client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 600,
+        messages: [{
+          role: "user",
+          content: `You are an Amazon FBA arbitrage learning coach. Write a helpful description for the following learning resource that a student is about to watch.
+
+Video title: ${title}
+Channel: ${channel || "(unknown)"}
+URL: ${url || "(none)"}
+Category: ${category || "general"}
+${dayNumber ? `Day ${dayNumber} of a 30-day curriculum` : ""}
+${weekNumber ? `Week ${weekNumber}` : ""}
+${whatItTeaches ? `Curated short summary: ${whatItTeaches}` : ""}
+${whyIncluded ? `Curator's note: ${whyIncluded}` : ""}
+
+IMPORTANT: You haven't actually watched this video. Base your description on the title, channel reputation, URL pattern, and what videos like this typically cover.
+
+Write 2-3 short paragraphs (no bullet points, no headings) that:
+1. Describe what topics this video most likely covers based on the title and channel
+2. Explain why it matters for an FBA arbitrage learner specifically at this point in their journey
+3. Give 3-4 concrete things to watch for or take notes on while watching
+
+Be direct and practical. No fluff, no hype, no "this video will revolutionize". Write like you're a senior seller briefing a junior before they watch. Limit to ~200 words total.`,
+        }],
+      });
+      const text = response.content[0].type === "text" ? response.content[0].text : "";
+      return NextResponse.json({ description: text });
+    }
+
     if (action === "analyze_video") {
       const { url, title } = data;
       const isYouTube = url?.includes("youtube.com") || url?.includes("youtu.be");

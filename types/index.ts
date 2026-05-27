@@ -59,6 +59,7 @@ export interface Video {
   mistakesToAvoid?: string;
   practiceCompleted?: boolean;
   needsAIReview?: boolean;
+  aiDescription?: string;
   dailyChecklist?: VideoDailyChecklist;
 }
 

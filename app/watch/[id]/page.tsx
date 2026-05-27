@@ -1,15 +1,14 @@
 "use client";
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import {
-  ArrowLeft, ExternalLink, CheckCircle2, Play, Save, Clock,
-  Target, Lightbulb, AlertTriangle, Sparkles, ListTodo,
-  ChevronLeft, ChevronRight, Star,
+  ArrowLeft, ExternalLink, CheckCircle2, Save, Target,
+  Sparkles, ChevronLeft, ChevronRight, Star, FileText,
 } from "lucide-react";
 import { cn, getYouTubeEmbedUrl, getYouTubeId } from "@/lib/utils";
-import { VideoStatus } from "@/types";
+import { VideoStatus, Video } from "@/types";
 
 const STATUS_OPTIONS: { value: VideoStatus; label: string }[] = [
   { value: "not_started", label: "Not Started" },
@@ -19,52 +18,20 @@ const STATUS_OPTIONS: { value: VideoStatus; label: string }[] = [
   { value: "skipped", label: "Skipped" },
 ];
 
-type NoteField = "mainIdea" | "keyTakeaways" | "timestampNotes" | "rulesLearned" | "mistakesToAvoid" | "actionItems";
-
-const NOTE_FIELDS: { key: NoteField; label: string; placeholder: string; icon: React.ComponentType<{ className?: string }>; hue: string }[] = [
-  {
-    key: "mainIdea",
-    label: "Main Idea",
-    placeholder: "In one sentence, what is this video really teaching?",
-    icon: Lightbulb,
-    hue: "from-amber-400 to-orange-500",
-  },
-  {
-    key: "keyTakeaways",
-    label: "Key Takeaways",
-    placeholder: "The 3-5 things you don't want to forget.\n\n1. \n2. \n3. ",
-    icon: Sparkles,
-    hue: "from-violet-400 to-fuchsia-500",
-  },
-  {
-    key: "timestampNotes",
-    label: "Timestamp Notes",
-    placeholder: "0:00 — Intro\n2:30 — First key point\n5:14 — That part you'll forget without writing down",
-    icon: Clock,
-    hue: "from-indigo-400 to-blue-500",
-  },
-  {
-    key: "rulesLearned",
-    label: "Rules / Heuristics",
-    placeholder: "Specific rules to apply later, e.g.\n- Skip if Amazon is in stock >70%\n- Buy box must be stable for 30+ days",
-    icon: Target,
-    hue: "from-emerald-400 to-teal-500",
-  },
-  {
-    key: "mistakesToAvoid",
-    label: "Mistakes to Avoid",
-    placeholder: "What this video warns against. Specific failure modes.",
-    icon: AlertTriangle,
-    hue: "from-rose-400 to-red-500",
-  },
-  {
-    key: "actionItems",
-    label: "Action Items",
-    placeholder: "What will you DO with this knowledge? Be specific.",
-    icon: ListTodo,
-    hue: "from-cyan-400 to-blue-500",
-  },
-];
+// Map video category → notes-page category for visual consistency
+function categoryForNote(video: Video): string {
+  const c = video.category ?? "General";
+  if (c === "Keepa") return "Keepa";
+  if (c === "SellerAmp") return "SellerAmp";
+  if (c === "Product Research") return "Product Research";
+  if (c === "Sourcing") return "Product Research";
+  if (c === "Risk Management") return "Risk Management";
+  if (c === "Ungating") return "Risk Management";
+  if (c === "Inventory" || c === "FBA Operations") return "Inventory Management";
+  if (c === "Profit Math" || c === "Business") return "Strategy";
+  if (c === "FBA Foundations") return "Amazon FBA Basics";
+  return "General";
+}
 
 export default function WatchPage() {
   const params = useParams<{ id: string }>();
@@ -73,9 +40,11 @@ export default function WatchPage() {
 
   const videos = useStore((s) => s.videos);
   const updateVideo = useStore((s) => s.updateVideo);
+  const notes = useStore((s) => s.notes);
+  const addNote = useStore((s) => s.addNote);
+  const updateNote = useStore((s) => s.updateNote);
 
-  // Sorted index of seeded curriculum videos for prev/next nav
-  const orderedSeeds = React.useMemo(
+  const orderedSeeds = useMemo(
     () => videos
       .filter((v) => v.isSeeded && v.dayNumber)
       .sort((a, b) => (a.dayNumber ?? 0) - (b.dayNumber ?? 0)),
@@ -87,45 +56,76 @@ export default function WatchPage() {
   const prevVideo = currentIdx > 0 ? orderedSeeds[currentIdx - 1] : null;
   const nextVideo = currentIdx >= 0 && currentIdx < orderedSeeds.length - 1 ? orderedSeeds[currentIdx + 1] : null;
 
-  const [notes, setNotes] = useState<Record<NoteField, string>>({
-    mainIdea: "",
-    keyTakeaways: "",
-    timestampNotes: "",
-    rulesLearned: "",
-    mistakesToAvoid: "",
-    actionItems: "",
-  });
+  // Find the existing note for this video (if any)
+  const existingNote = useMemo(
+    () => video ? notes.find((n) => n.relatedVideoId === video.id) : undefined,
+    [notes, video?.id], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  const [noteText, setNoteText] = useState("");
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noteIdRef = useRef<string | undefined>(existingNote?.id);
 
-  // Hydrate notes from store when video loads/changes
+  // Hydrate text when video/note loads
   useEffect(() => {
     if (!video) return;
-    setNotes({
-      mainIdea: video.mainIdea ?? "",
-      keyTakeaways: video.keyTakeaways ?? "",
-      timestampNotes: video.timestampNotes ?? "",
-      rulesLearned: video.rulesLearned ?? "",
-      mistakesToAvoid: video.mistakesToAvoid ?? "",
-      actionItems: video.actionItems ?? "",
-    });
+    setNoteText(existingNote?.detailedNotes ?? video.mainIdea ?? "");
+    noteIdRef.current = existingNote?.id;
   }, [video?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const saveAll = useCallback((newNotes: Record<NoteField, string>) => {
+  // Keep noteIdRef in sync if a note is later created or deleted
+  useEffect(() => {
+    noteIdRef.current = existingNote?.id;
+  }, [existingNote?.id]);
+
+  const saveNote = useCallback((text: string) => {
     if (!video) return;
-    updateVideo(video.id, newNotes);
-    setSavedAt(Date.now());
-  }, [video, updateVideo]);
+    const trimmed = text.trim();
 
-  const scheduleSave = useCallback((newNotes: Record<NoteField, string>) => {
+    // If the existing note has an id, update it (or delete if empty)
+    if (noteIdRef.current) {
+      updateNote(noteIdRef.current, {
+        detailedNotes: text,
+        title: video.title,
+        category: categoryForNote(video),
+        subcategory: video.dayNumber ? `Day ${video.dayNumber}` : (video.isBonus ? "Bonus" : ""),
+        relatedVideoId: video.id,
+      });
+      setSavedAt(Date.now());
+      return;
+    }
+
+    // No existing note — create one only when there's something to save
+    if (trimmed.length > 0) {
+      addNote({
+        title: video.title,
+        category: categoryForNote(video),
+        subcategory: video.dayNumber ? `Day ${video.dayNumber}` : (video.isBonus ? "Bonus" : ""),
+        date: new Date().toISOString().split("T")[0],
+        mainIdea: video.mainIdea ?? "",
+        detailedNotes: text,
+        keyLesson: "",
+        mistakesToAvoid: "",
+        actionSteps: video.practiceTask ?? "",
+        relatedVideoId: video.id,
+        relatedProductId: "",
+        tags: video.tags?.filter((t) => !["critical", "core", "supporting"].includes(t)) ?? [],
+        confidenceScore: video.confidenceScore ?? 5,
+        needReview: false,
+      });
+      setSavedAt(Date.now());
+    }
+  }, [video, addNote, updateNote]);
+
+  const scheduleSave = useCallback((text: string) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => saveAll(newNotes), 800);
-  }, [saveAll]);
+    saveTimerRef.current = setTimeout(() => saveNote(text), 800);
+  }, [saveNote]);
 
-  function handleNoteChange(key: NoteField, value: string) {
-    const next = { ...notes, [key]: value };
-    setNotes(next);
-    scheduleSave(next);
+  function handleNoteChange(value: string) {
+    setNoteText(value);
+    scheduleSave(value);
   }
 
   function handleStatusChange(status: VideoStatus) {
@@ -163,7 +163,10 @@ export default function WatchPage() {
   const ytId = getYouTubeId(video.link);
   const isCritical = video.tags?.includes("critical");
   const isCore = video.tags?.includes("core");
-  const isPracticeDay = !video.link && (video.category === "Practice" || video.category === "Action" || video.category === "Strategy" || video.category === "Planning" || video.category === "Profit Math" || video.category === "Business" || video.category === "FBA Operations");
+  const isPracticeDay = !video.link && [
+    "Practice", "Action", "Strategy", "Planning",
+    "Profit Math", "Business", "FBA Operations",
+  ].includes(video.category ?? "");
   const savedRecently = savedAt && Date.now() - savedAt < 2000;
 
   return (
@@ -202,7 +205,7 @@ export default function WatchPage() {
               )}
               {savedRecently && (
                 <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1 ml-1">
-                  <CheckCircle2 className="h-3 w-3" /> saved
+                  <CheckCircle2 className="h-3 w-3" /> saved to Notes
                 </span>
               )}
             </div>
@@ -223,7 +226,7 @@ export default function WatchPage() {
 
       <div className="max-w-[1600px] mx-auto p-4 lg:p-6">
         {/* ─── Main 2-column layout ─── */}
-        <div className="grid lg:grid-cols-[1fr_400px] gap-6">
+        <div className="grid lg:grid-cols-[1fr_420px] gap-6">
           {/* ─── LEFT: Player + context ─── */}
           <div className="space-y-5">
             {/* Player */}
@@ -244,7 +247,7 @@ export default function WatchPage() {
                   <Target className="h-16 w-16 mx-auto mb-4 opacity-90" />
                   <h2 className="text-2xl lg:text-3xl font-black mb-2">Practice Day</h2>
                   <p className="text-white/90 max-w-md mx-auto">
-                    No video today. Use this day to apply what you&apos;ve learned. The task is in the sidebar →
+                    No video today. Use this day to apply what you&apos;ve learned. The task is below.
                   </p>
                 </div>
               </div>
@@ -276,7 +279,6 @@ export default function WatchPage() {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                {/* Rating */}
                 <div className="flex items-center gap-1">
                   {[1, 2, 3, 4, 5].map((i) => (
                     <button
@@ -309,7 +311,6 @@ export default function WatchPage() {
               </div>
             </div>
 
-            {/* Why included */}
             {video.whyIncluded && (
               <div className="p-4 rounded-2xl bg-gradient-to-br from-violet-500/10 via-fuchsia-500/5 to-transparent border border-violet-500/20">
                 <div className="text-[10px] uppercase tracking-widest text-violet-600 dark:text-violet-300 font-bold mb-1.5 flex items-center gap-1">
@@ -319,17 +320,15 @@ export default function WatchPage() {
               </div>
             )}
 
-            {/* What it teaches */}
             {video.whatItTeaches && (
               <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-500/10 via-blue-500/5 to-transparent border border-indigo-500/20">
                 <div className="text-[10px] uppercase tracking-widest text-indigo-600 dark:text-indigo-300 font-bold mb-1.5 flex items-center gap-1">
-                  <Lightbulb className="h-3 w-3" /> What it teaches
+                  What it teaches
                 </div>
                 <p className="text-sm leading-relaxed">{video.whatItTeaches}</p>
               </div>
             )}
 
-            {/* Practice task — the action */}
             {video.practiceTask && (
               <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-500/30">
                 <div className="text-[10px] uppercase tracking-widest text-emerald-600 dark:text-emerald-400 font-bold mb-1.5 flex items-center gap-1">
@@ -380,20 +379,20 @@ export default function WatchPage() {
             </div>
           </div>
 
-          {/* ─── RIGHT: Notes sidebar ─── */}
+          {/* ─── RIGHT: One-big-notes sidebar ─── */}
           <aside className="lg:sticky lg:top-20 lg:self-start space-y-4">
-            <div className="card-soft p-5">
-              <div className="flex items-center justify-between mb-1">
+            <div className="card-soft p-5 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
                 <h2 className="text-lg font-bold flex items-center gap-2">
-                  <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center">
-                    <Sparkles className="h-4 w-4 text-white" />
+                  <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center">
+                    <FileText className="h-4 w-4 text-white" />
                   </span>
-                  Your Notes
+                  Notes
                 </h2>
                 <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                   {savedRecently ? (
                     <>
-                      <CheckCircle2 className="h-3 w-3 text-emerald-500" /> auto-saved
+                      <CheckCircle2 className="h-3 w-3 text-emerald-500" /> saved to Notes
                     </>
                   ) : (
                     <>
@@ -402,34 +401,39 @@ export default function WatchPage() {
                   )}
                 </span>
               </div>
-              <p className="text-xs text-muted-foreground mb-4">
-                Type freely — saves as you write. Notes stay attached to this video forever.
+              <p className="text-xs text-muted-foreground -mt-2">
+                Type freely. Saves automatically into your{" "}
+                <Link href="/notes" className="underline hover:text-foreground">Notes page</Link>{" "}
+                — linked to this video forever.
               </p>
 
-              <div className="space-y-4">
-                {NOTE_FIELDS.map((field) => (
-                  <div key={field.key}>
-                    <label className="text-xs font-bold mb-1.5 flex items-center gap-1.5">
-                      <span className={cn("w-5 h-5 rounded-md bg-gradient-to-br flex items-center justify-center", field.hue)}>
-                        <field.icon className="h-3 w-3 text-white" />
-                      </span>
-                      {field.label}
-                    </label>
-                    <textarea
-                      value={notes[field.key]}
-                      onChange={(e) => handleNoteChange(field.key, e.target.value)}
-                      placeholder={field.placeholder}
-                      rows={field.key === "keyTakeaways" || field.key === "timestampNotes" ? 4 : 2}
-                      className="w-full text-xs px-2.5 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-violet-400/40 focus:border-violet-400 transition resize-y"
-                    />
-                  </div>
-                ))}
-              </div>
+              <textarea
+                value={noteText}
+                onChange={(e) => handleNoteChange(e.target.value)}
+                placeholder={
+                  "Capture what you learned. Some prompts to get started:\n\n" +
+                  "• What's the one big idea?\n" +
+                  "• What rule will you apply?\n" +
+                  "• What mistake will you avoid?\n" +
+                  "• What's your next action?\n"
+                }
+                rows={18}
+                className="w-full text-sm px-3 py-2.5 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-violet-400/40 focus:border-violet-400 transition resize-y leading-relaxed"
+              />
+
+              {existingNote && (
+                <Link
+                  href="/notes"
+                  className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                >
+                  <FileText className="h-3 w-3" /> View in Notes page
+                </Link>
+              )}
             </div>
 
             {/* Confidence rating */}
             <div className="card-soft p-5">
-              <label className="text-xs font-bold mb-2 block flex items-center gap-1.5">
+              <label className="text-xs font-bold mb-2 flex items-center gap-1.5">
                 <Target className="h-3.5 w-3.5 text-emerald-500" />
                 Confidence (1–10): how well did this stick?
               </label>

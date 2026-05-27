@@ -125,13 +125,16 @@ export const useStore = create<AppState>()(
 
       initializeData: () => {
         const state = get();
-        // v5 marker: every seeded video now ships with a pre-written aiDescription.
-        // If Day 1's seeded video doesn't have aiDescription, we're on an older seed.
-        const hasV5Seed = state.videos.some(
-          (v) => v.isSeeded && v.dayNumber === 1 && typeof v.aiDescription === "string" && v.aiDescription.length > 100,
+        // v7 marker: short, casual, human-style descriptions.
+        // Day 1's seed should now START with "Reezy's been doing this".
+        const hasV7Seed = state.videos.some(
+          (v) => v.isSeeded
+            && v.dayNumber === 1
+            && typeof v.aiDescription === "string"
+            && v.aiDescription.startsWith("Reezy's been"),
         );
         const userVideos = state.videos.filter((v) => !v.isSeeded);
-        if (!hasV5Seed) {
+        if (!hasV7Seed) {
           set({
             videos: [...SEED_VIDEOS, ...userVideos],
             flashcards: state.flashcards.length > 0 ? state.flashcards : SEED_FLASHCARDS,

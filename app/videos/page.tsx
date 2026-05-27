@@ -320,31 +320,32 @@ function ThirtyDayPlanView({ videos, onStatusChange, onViewDetails, onEdit }: {
                   {Object.entries(weekDays).sort(([a], [b]) => +a - +b).map(([, dayVids]) =>
                     dayVids.map(v => (
                       <div key={v.id} className={cn(
-                        "flex items-center gap-2 p-2 rounded-lg border transition-colors",
+                        "group flex items-center gap-2 p-1 pl-2 rounded-lg border transition-all hover:border-violet-400 hover:shadow-sm",
                         v.status === "completed" ? "bg-green-50 dark:bg-green-900/10 border-green-200" :
                         v.status === "watching" ? "bg-blue-50 dark:bg-blue-900/10 border-blue-200" :
                         v.status === "rewatch" ? "bg-orange-50 dark:bg-orange-900/10 border-orange-200" :
                         "bg-card border-border"
                       )}>
-                        <Badge className="text-xs shrink-0 bg-blue-600 text-white w-14 text-center justify-center">Day {v.dayNumber}</Badge>
-                        {v.sourceType === "Practice Day"
-                          ? <Brain className="h-3.5 w-3.5 text-green-600 shrink-0" />
-                          : v.sourceType?.includes("YouTube")
-                          ? <PlayCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                          : <BookOpen className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                        }
-                        <p className="text-xs font-medium flex-1 min-w-0 truncate">{v.title}</p>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <Select value={v.status} onValueChange={s => onStatusChange(v.id, s as VideoStatus)}>
-                            <SelectTrigger className="h-6 text-xs w-[110px]"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {STATUS_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                          <Link href={`/watch/${v.id}`} title="Watch + take notes">
-                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-violet-600"><PlayCircle className="h-3.5 w-3.5" /></Button>
-                          </Link>
-                        </div>
+                        <Link
+                          href={`/watch/${v.id}`}
+                          className="flex items-center gap-2 flex-1 min-w-0 py-1.5 pr-2 cursor-pointer"
+                          title="Watch + take notes"
+                        >
+                          <Badge className="text-xs shrink-0 bg-blue-600 text-white w-14 text-center justify-center">Day {v.dayNumber}</Badge>
+                          {v.sourceType === "Practice Day"
+                            ? <Brain className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                            : v.sourceType?.includes("YouTube")
+                            ? <PlayCircle className="h-4 w-4 text-violet-600 group-hover:scale-110 transition-transform shrink-0" />
+                            : <BookOpen className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                          }
+                          <p className="text-xs font-medium flex-1 min-w-0 truncate group-hover:text-violet-700 dark:group-hover:text-violet-300 transition-colors">{v.title}</p>
+                        </Link>
+                        <Select value={v.status} onValueChange={s => onStatusChange(v.id, s as VideoStatus)}>
+                          <SelectTrigger className="h-7 text-xs w-[110px] shrink-0"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {STATUS_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
                       </div>
                     ))
                   )}
@@ -374,21 +375,23 @@ function ThirtyDayPlanView({ videos, onStatusChange, onViewDetails, onEdit }: {
             <div className="space-y-1.5">
               {bonusVideos.map(v => (
                 <div key={v.id} className={cn(
-                  "flex items-center gap-2 p-2 rounded-lg border",
+                  "group flex items-center gap-2 p-1 pl-2 rounded-lg border transition-all hover:border-violet-400 hover:shadow-sm",
                   v.status === "completed" ? "bg-green-50 dark:bg-green-900/10 border-green-200" : "bg-card border-border"
                 )}>
-                  <Badge variant="warning" className="text-xs shrink-0">Bonus</Badge>
-                  <p className="text-xs font-medium flex-1 min-w-0 truncate">{v.title}</p>
-                  <Badge variant="muted" className="text-xs hidden sm:inline-flex shrink-0">{v.category}</Badge>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Select value={v.status} onValueChange={s => onStatusChange(v.id, s as VideoStatus)}>
-                      <SelectTrigger className="h-6 text-xs w-[110px]"><SelectValue /></SelectTrigger>
-                      <SelectContent>{STATUS_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
-                    </Select>
-                    <Link href={`/watch/${v.id}`} title="Watch + take notes">
-                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-violet-600"><PlayCircle className="h-3.5 w-3.5" /></Button>
-                    </Link>
-                  </div>
+                  <Link
+                    href={`/watch/${v.id}`}
+                    className="flex items-center gap-2 flex-1 min-w-0 py-1.5 pr-2 cursor-pointer"
+                    title="Watch + take notes"
+                  >
+                    <Badge variant="warning" className="text-xs shrink-0">Bonus</Badge>
+                    <PlayCircle className="h-4 w-4 text-violet-600 group-hover:scale-110 transition-transform shrink-0" />
+                    <p className="text-xs font-medium flex-1 min-w-0 truncate group-hover:text-violet-700 dark:group-hover:text-violet-300 transition-colors">{v.title}</p>
+                    <Badge variant="muted" className="text-xs hidden sm:inline-flex shrink-0">{v.category}</Badge>
+                  </Link>
+                  <Select value={v.status} onValueChange={s => onStatusChange(v.id, s as VideoStatus)}>
+                    <SelectTrigger className="h-7 text-xs w-[110px] shrink-0"><SelectValue /></SelectTrigger>
+                    <SelectContent>{STATUS_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                  </Select>
                 </div>
               ))}
             </div>

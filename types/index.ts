@@ -133,6 +133,7 @@ export interface ProductAnalysis {
   breakEvenPrice: number;
   minimumSafePrice: number;
   estimatedMonthlySales: number;
+  salesRank: number;
   fbaSellerCount: number;
   totalOfferCount: number;
   amazonPresence: string;

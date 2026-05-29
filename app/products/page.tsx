@@ -10,8 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { formatDate, formatCurrency, calculateNetProfit, calculateROI } from "@/lib/utils";
+import { scoreDeal, DealVerdict, BSR_CATEGORY_NAMES } from "@/lib/scoring";
 import { ProductAnalysis, ProductDecision, RiskLevel } from "@/types";
-import { Plus, Search, Package, TrendingUp, DollarSign, AlertTriangle } from "lucide-react";
+import { Plus, Search, Package, TrendingUp, DollarSign, AlertTriangle, CheckCircle2, XCircle, Gauge } from "lucide-react";
 
 const DECISION_LABELS: Record<ProductDecision, string> = {
   reject: "Reject",
@@ -29,12 +30,20 @@ const DECISION_COLORS: Record<ProductDecision, string> = {
   reorder_later: "text-purple-600 bg-purple-50 border-purple-200",
 };
 
+const BAND_STYLES: Record<string, { wrap: string; bar: string }> = {
+  strong_buy: { wrap: "from-emerald-500 to-green-600", bar: "bg-emerald-500" },
+  buy: { wrap: "from-green-500 to-teal-600", bar: "bg-green-500" },
+  review: { wrap: "from-amber-500 to-yellow-600", bar: "bg-amber-500" },
+  watch: { wrap: "from-orange-500 to-amber-600", bar: "bg-orange-500" },
+  reject: { wrap: "from-rose-500 to-red-600", bar: "bg-rose-500" },
+};
+
 const EMPTY_FORM = (): Omit<ProductAnalysis, "id" | "createdAt"> => ({
   productTitle: "", asin: "", upc: "", category: "", brand: "", supplierSource: "",
   buyCost: 0, amazonPrice: 0, avg30DayPrice: 0, avg90DayPrice: 0,
   fbaFee: 0, referralFee: 0, inboundShipping: 0, prepCost: 0,
   netProfit: 0, roi: 0, profitMargin: 0, breakEvenPrice: 0, minimumSafePrice: 0,
-  estimatedMonthlySales: 0, fbaSellerCount: 0, totalOfferCount: 0,
+  estimatedMonthlySales: 0, salesRank: 0, fbaSellerCount: 0, totalOfferCount: 0,
   amazonPresence: "", offerCountTrend: "", riskLevel: "medium" as RiskLevel,
   oversaturationLevel: "", matchConfidence: "", myDecision: "manual_review" as ProductDecision,
   aiNotes: "", whatILearned: "", score: 0, testQuantity: 10,
@@ -67,6 +76,28 @@ export default function ProductsPage() {
     };
   }, [productAnalyses]);
 
+  function buildVerdict(f: Omit<ProductAnalysis, "id" | "createdAt">): DealVerdict {
+    return scoreDeal({
+      buyCost: f.buyCost,
+      amazonPrice: f.amazonPrice,
+      netProfit: f.netProfit,
+      roi: f.roi,
+      category: f.category,
+      salesRank: f.salesRank,
+      estimatedMonthlySales: f.estimatedMonthlySales,
+      fbaSellerCount: f.fbaSellerCount,
+      totalOfferCount: f.totalOfferCount,
+      amazonPresence: f.amazonPresence,
+      offerCountTrend: f.offerCountTrend,
+      avg30DayPrice: f.avg30DayPrice,
+      avg90DayPrice: f.avg90DayPrice,
+      riskLevel: f.riskLevel,
+      minROI: settings.minROI,
+      preferredROI: settings.preferredROI,
+      minProfit: settings.minProfit,
+    });
+  }
+
   function recalculate(f: Omit<ProductAnalysis, "id" | "createdAt">): Omit<ProductAnalysis, "id" | "createdAt"> {
     const netProfit = calculateNetProfit(f.avg90DayPrice || f.amazonPrice, f.buyCost, f.fbaFee, f.referralFee, f.inboundShipping, f.prepCost);
     const totalCost = f.buyCost + f.inboundShipping + f.prepCost;
@@ -76,16 +107,13 @@ export default function ProductsPage() {
     const referralPct = f.referralFee > 0 && f.amazonPrice > 0 ? f.referralFee / f.amazonPrice : 0.15;
     const breakEvenPrice = referralPct < 1 ? fixedCosts / (1 - referralPct) : fixedCosts;
     const minimumSafePrice = breakEvenPrice + settings.minProfit;
-    const score = Math.min(100, Math.max(0,
-      (roi >= settings.preferredROI ? 20 : roi >= settings.minROI ? 10 : 0) +
-      (netProfit >= settings.minProfit * 2 ? 20 : netProfit >= settings.minProfit ? 10 : 0) +
-      (f.fbaSellerCount >= 3 && f.fbaSellerCount <= 15 ? 20 : f.fbaSellerCount <= 25 ? 10 : 0) +
-      (f.riskLevel === "low" ? 15 : f.riskLevel === "medium" ? 8 : 0) +
-      (f.estimatedMonthlySales > 10 ? 15 : f.estimatedMonthlySales > 5 ? 8 : 0) +
-      10
-    ));
-    return { ...f, netProfit, roi, profitMargin, breakEvenPrice, minimumSafePrice, score };
+    // Research-backed 100-pt score (profit + velocity + competition + Amazon + price).
+    const withFinancials = { ...f, netProfit, roi, profitMargin, breakEvenPrice, minimumSafePrice };
+    const score = buildVerdict(withFinancials).total;
+    return { ...withFinancials, score };
   }
+
+  const verdict = useMemo(() => buildVerdict(form), [form]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleFieldChange(field: string, value: number | string) {
     setForm(f => {
@@ -165,7 +193,9 @@ export default function ProductsPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map(p => (
+        {filtered.map(p => {
+          const v = buildVerdict(p);
+          return (
           <Card key={p.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setViewProduct(p)}>
             <CardContent className="p-4 space-y-3">
               <div className="flex items-start justify-between gap-2">
@@ -174,6 +204,11 @@ export default function ProductsPage() {
                   {p.brand && <p className="text-xs text-muted-foreground">{p.brand}</p>}
                 </div>
                 <Badge className={`text-xs shrink-0 ${DECISION_COLORS[p.myDecision]}`}>{DECISION_LABELS[p.myDecision]}</Badge>
+              </div>
+
+              <div className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-white bg-gradient-to-r ${BAND_STYLES[v.band].wrap}`}>
+                <span className="text-xs font-bold flex items-center gap-1"><Gauge className="h-3.5 w-3.5" />{v.bandLabel}</span>
+                <span className="text-sm font-black">{v.total}<span className="text-[10px] opacity-70">/100</span></span>
               </div>
 
               <div className="grid grid-cols-3 gap-2 text-xs">
@@ -205,7 +240,8 @@ export default function ProductsPage() {
               <p className="text-xs text-muted-foreground">{formatDate(p.createdAt)}</p>
             </CardContent>
           </Card>
-        ))}
+          );
+        })}
         {filtered.length === 0 && (
           <div className="col-span-3 text-center py-12">
             <Package className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
@@ -225,7 +261,7 @@ export default function ProductsPage() {
               <div className="col-span-2 space-y-1"><Label>Product Title *</Label><Input value={form.productTitle} onChange={e => setForm(f => ({ ...f, productTitle: e.target.value }))} /></div>
               <div className="space-y-1"><Label>ASIN</Label><Input value={form.asin} onChange={e => setForm(f => ({ ...f, asin: e.target.value }))} placeholder="B0XXXXXXXXX" /></div>
               <div className="space-y-1"><Label>UPC</Label><Input value={form.upc} onChange={e => setForm(f => ({ ...f, upc: e.target.value }))} /></div>
-              <div className="space-y-1"><Label>Category</Label><Input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} /></div>
+              <div className="space-y-1"><Label>Category</Label><Input list="bsr-categories" value={form.category} onChange={e => handleFieldChange("category", e.target.value)} placeholder="Toys & Games, Office Products..." /><datalist id="bsr-categories">{BSR_CATEGORY_NAMES.map(c => <option key={c} value={c} />)}</datalist></div>
               <div className="space-y-1"><Label>Brand</Label><Input value={form.brand} onChange={e => setForm(f => ({ ...f, brand: e.target.value }))} /></div>
               <div className="col-span-2 space-y-1"><Label>Supplier / Source</Label><Input value={form.supplierSource} onChange={e => setForm(f => ({ ...f, supplierSource: e.target.value }))} /></div>
             </div>
@@ -260,7 +296,8 @@ export default function ProductsPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="space-y-1"><Label className="text-xs">FBA Seller Count</Label><Input type="number" value={form.fbaSellerCount || ""} onChange={e => handleFieldChange("fbaSellerCount", +e.target.value)} /></div>
               <div className="space-y-1"><Label className="text-xs">Total Offer Count</Label><Input type="number" value={form.totalOfferCount || ""} onChange={e => setForm(f => ({ ...f, totalOfferCount: +e.target.value }))} /></div>
-              <div className="space-y-1"><Label className="text-xs">Monthly Sales Est.</Label><Input type="number" value={form.estimatedMonthlySales || ""} onChange={e => setForm(f => ({ ...f, estimatedMonthlySales: +e.target.value }))} /></div>
+              <div className="space-y-1"><Label className="text-xs">Sales Rank (BSR)</Label><Input type="number" value={form.salesRank || ""} onChange={e => handleFieldChange("salesRank", +e.target.value)} /></div>
+              <div className="space-y-1"><Label className="text-xs">Monthly Sales Est.</Label><Input type="number" value={form.estimatedMonthlySales || ""} onChange={e => handleFieldChange("estimatedMonthlySales", +e.target.value)} /></div>
               <div className="space-y-1"><Label className="text-xs">Test Quantity</Label><Input type="number" value={form.testQuantity || ""} onChange={e => setForm(f => ({ ...f, testQuantity: +e.target.value }))} /></div>
               <div className="space-y-1"><Label className="text-xs">Amazon Presence</Label>
                 <Select value={form.amazonPresence} onValueChange={v => setForm(f => ({ ...f, amazonPresence: v }))}>
@@ -300,6 +337,64 @@ export default function ProductsPage() {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{Object.entries(DECISION_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* ─── Research-backed Verdict ─── */}
+            <div className={`rounded-xl p-4 bg-gradient-to-br ${BAND_STYLES[verdict.band].wrap} text-white`}>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Gauge className="h-5 w-5" />
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wider opacity-80 leading-none">Verdict</p>
+                    <p className="text-xl font-black leading-tight">{verdict.bandLabel}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-black leading-none">{verdict.total}<span className="text-base opacity-70">/100</span></p>
+                  {verdict.suggestedDecision !== form.myDecision && (
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, myDecision: verdict.suggestedDecision as ProductDecision }))}
+                      className="text-[11px] underline opacity-90 hover:opacity-100 mt-0.5"
+                    >
+                      apply suggested → {DECISION_LABELS[verdict.suggestedDecision as ProductDecision]}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* sub-score bars */}
+              <div className="grid sm:grid-cols-5 gap-2 mt-3">
+                {verdict.subScores.map(s => (
+                  <div key={s.key} className="bg-white/15 rounded-lg p-2">
+                    <div className="flex justify-between text-[10px] font-medium mb-1">
+                      <span className="opacity-90">{s.label}</span>
+                      <span>{s.score}/{s.max}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-white/25 overflow-hidden">
+                      <div className="h-full rounded-full bg-white" style={{ width: `${(s.score / s.max) * 100}%` }} />
+                    </div>
+                    <p className="text-[9px] opacity-80 mt-1 truncate" title={s.note}>{s.note}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* signals */}
+              <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1 mt-3">
+                {verdict.redFlags.slice(0, 6).map((r, i) => (
+                  <div key={`r-${i}`} className="flex items-start gap-1.5 text-[11px]"><XCircle className="h-3.5 w-3.5 mt-px shrink-0" /><span>{r}</span></div>
+                ))}
+                {verdict.greenFlags.slice(0, 6).map((g, i) => (
+                  <div key={`g-${i}`} className="flex items-start gap-1.5 text-[11px] opacity-95"><CheckCircle2 className="h-3.5 w-3.5 mt-px shrink-0" /><span>{g}</span></div>
+                ))}
+              </div>
+
+              {/* derived metrics */}
+              <div className="flex flex-wrap gap-2 mt-3 text-[11px]">
+                {verdict.bsr && <span className="px-2 py-0.5 rounded-full bg-white/20">{verdict.bsr.label}{verdict.bsr.matchedCategory ? ` · ${verdict.bsr.matchedCategory}` : ""}</span>}
+                {verdict.salesPerSellerValue !== null && <span className="px-2 py-0.5 rounded-full bg-white/20">~{verdict.salesPerSellerValue.toFixed(1)} sales/mo for you</span>}
+                {verdict.sellThroughValue && <span className="px-2 py-0.5 rounded-full bg-white/20">Sell-through: {verdict.sellThroughValue.label}</span>}
               </div>
             </div>
 

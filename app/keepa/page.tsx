@@ -12,8 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { scoreKeepaMarket, BSR_CATEGORY_NAMES } from "@/lib/scoring";
 import { KeepaEntry, KeepaDecision } from "@/types";
-import { Plus, Search, CheckCircle2, XCircle, Target, TrendingDown, AlertTriangle, LineChart } from "lucide-react";
+import { Plus, Search, CheckCircle2, XCircle, Target, AlertTriangle, LineChart, Gauge } from "lucide-react";
 
 const KEEPA_DECISIONS: KeepaDecision[] = [
   "good_buy", "bad_buy", "manual_review", "too_risky", "oversaturated",
@@ -46,17 +47,20 @@ const DECISION_COLORS: Record<KeepaDecision, string> = {
   need_more_data: "text-blue-600 bg-blue-50 border-blue-200",
 };
 
-const CHECKLIST_ITEMS = [
-  { key: "priceCloseToAvg", label: "Is the current price close to the 90-day average?" },
-  { key: "consistentRankDrops", label: "Does sales rank drop consistently?" },
-  { key: "amazonNotInStock", label: "Is Amazon NOT in stock often (low %)" },
-  { key: "noRecentSellerSpike", label: "No recent seller count spike" },
-  { key: "buyBoxStable", label: "Is Buy Box price stable?" },
-  { key: "notSeasonal", label: "Is the product NOT seasonal?" },
-  { key: "acceptableFBASellers", label: "Are there an acceptable number of FBA sellers (3-15)?" },
-  { key: "profitIsReal", label: "Is the profit real, not temporary?" },
-  { key: "noPriceCrash", label: "No recent price crash visible on chart" },
-  { key: "wouldTestBuy", label: "Would you buy 5-20 test units at current price?" },
+// Research-backed checklist, grouped by the SellerAmp "O.A. Risk Matrix" pillars.
+const CHECKLIST_ITEMS: { key: string; label: string; pillar: string }[] = [
+  { key: "bsrTopTier", label: "BSR is in the top ~1–5% for its category (fast mover)", pillar: "Velocity" },
+  { key: "consistentRankDrops", label: "Sales rank drops consistently (each drop ≈ a sale)", pillar: "Velocity" },
+  { key: "salesPerSellerOk", label: "Expected sales/seller ≥ 3–5 per month", pillar: "Velocity" },
+  { key: "acceptableFBASellers", label: "3–15 FBA sellers (not oversaturated, not a 1-seller brand)", pillar: "Competition" },
+  { key: "offerCountStable", label: "Offer count is stable or declining (not exploding)", pillar: "Competition" },
+  { key: "amazonNotInStock", label: "Amazon absent or rarely in the buy box (< ~20%)", pillar: "Amazon" },
+  { key: "priceAtOrAboveAvg", label: "Current price is at/above the 90-day average", pillar: "Buy Box" },
+  { key: "notTanking", label: "30-day average is NOT crashing below the 90-day", pillar: "Buy Box" },
+  { key: "noIpRisk", label: "No IP-complaint risk — brand is safe to sell new", pillar: "IP / Listing" },
+  { key: "notRestricted", label: "Not hazmat / meltable / gated / restricted for me", pillar: "IP / Listing" },
+  { key: "profitReal", label: "ROI ≥ 30% and ≥ $3–5 profit after ALL fees", pillar: "Profit" },
+  { key: "wouldTestBuy", label: "Would buy 5–20 test units at this price", pillar: "Action" },
 ];
 
 const COMMON_MISTAKES = [
@@ -141,6 +145,27 @@ export default function KeepaPage() {
   }
 
   const checklistScore = Object.values(form.checklist).filter(Boolean).length;
+  const checklistTotal = CHECKLIST_ITEMS.length;
+
+  // Live "what the rules say" verdict from the entered Keepa numbers.
+  const market = useMemo(() => scoreKeepaMarket({
+    category: form.category,
+    salesRank: form.salesRank,
+    salesRankDrops: form.salesRankDrops,
+    offerCount: form.offerCount,
+    fbaSellerCount: form.fbaSellerCount,
+    amazonInStockPercent: form.amazonInStockPercent,
+    currentBuyBox: form.currentBuyBox,
+    avg30DayPrice: form.avg30DayPrice,
+    avg90DayPrice: form.avg90DayPrice,
+  }), [form]);
+
+  const marketWrap =
+    market.total >= 80 ? "from-emerald-500 to-green-600" :
+    market.total >= 65 ? "from-green-500 to-teal-600" :
+    market.total >= 50 ? "from-amber-500 to-yellow-600" :
+    market.total >= 35 ? "from-orange-500 to-amber-600" :
+    "from-rose-500 to-red-600";
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 lg:p-8">
@@ -244,9 +269,9 @@ export default function KeepaPage() {
                 <div>
                   <div className="flex justify-between text-xs mb-1">
                     <span className="text-muted-foreground">Checklist Score</span>
-                    <span>{Object.values(k.checklist).filter(Boolean).length}/10</span>
+                    <span>{Object.values(k.checklist).filter(Boolean).length}/{CHECKLIST_ITEMS.length}</span>
                   </div>
-                  <Progress value={Object.values(k.checklist).filter(Boolean).length * 10} className="h-1" />
+                  <Progress value={Object.values(k.checklist).filter(Boolean).length * (100 / CHECKLIST_ITEMS.length)} className="h-1" />
                 </div>
 
                 <p className="text-xs text-muted-foreground">{formatDate(k.createdAt)}</p>
@@ -286,7 +311,8 @@ export default function KeepaPage() {
               </div>
               <div className="space-y-1">
                 <Label>Category</Label>
-                <Input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} placeholder="Office Products, Pet Supplies..." />
+                <Input list="keepa-bsr-categories" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} placeholder="Office Products, Pet Supplies..." />
+                <datalist id="keepa-bsr-categories">{BSR_CATEGORY_NAMES.map(c => <option key={c} value={c} />)}</datalist>
               </div>
             </div>
 
@@ -308,11 +334,69 @@ export default function KeepaPage() {
               </div>
             </div>
 
+            {/* ─── Live "What the rules say" verdict ─── */}
+            <div className={`rounded-xl p-4 bg-gradient-to-br ${marketWrap} text-white`}>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Gauge className="h-5 w-5" />
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wider opacity-80 leading-none">What the rules say</p>
+                    <p className="text-xl font-black leading-tight">{market.label}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-black leading-none">{market.total}<span className="text-base opacity-70">/100</span></p>
+                  <p className="text-[11px] opacity-90 mt-0.5">
+                    suggests: <span className="font-bold">{DECISION_LABELS[market.suggestedDecision as KeepaDecision]}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
+                {market.subScores.map(s => (
+                  <div key={s.key} className="bg-white/15 rounded-lg p-2">
+                    <div className="flex justify-between text-[10px] font-medium mb-1">
+                      <span className="opacity-90">{s.label}</span>
+                      <span>{s.score}/{s.max}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-white/25 overflow-hidden">
+                      <div className="h-full rounded-full bg-white" style={{ width: `${(s.score / s.max) * 100}%` }} />
+                    </div>
+                    <p className="text-[9px] opacity-80 mt-1 truncate" title={s.note}>{s.note}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1 mt-3">
+                {market.redFlags.slice(0, 5).map((r, i) => (
+                  <div key={`r-${i}`} className="flex items-start gap-1.5 text-[11px]"><XCircle className="h-3.5 w-3.5 mt-px shrink-0" /><span>{r}</span></div>
+                ))}
+                {market.greenFlags.slice(0, 5).map((g, i) => (
+                  <div key={`g-${i}`} className="flex items-start gap-1.5 text-[11px] opacity-95"><CheckCircle2 className="h-3.5 w-3.5 mt-px shrink-0" /><span>{g}</span></div>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 mt-3 text-[11px]">
+                {market.bsr && <span className="px-2 py-0.5 rounded-full bg-white/20">{market.bsr.label}{market.bsr.matchedCategory ? ` · ${market.bsr.matchedCategory}` : ""}</span>}
+                {market.salesPerSellerValue !== null && <span className="px-2 py-0.5 rounded-full bg-white/20">~{market.salesPerSellerValue.toFixed(1)} sales/mo for you</span>}
+                {market.suggestedDecision !== form.correctDecision && (
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, correctDecision: market.suggestedDecision as KeepaDecision }))}
+                    className="ml-auto px-2 py-0.5 rounded-full bg-white/90 text-slate-800 font-semibold hover:bg-white transition"
+                  >
+                    use as “Correct Decision”
+                  </button>
+                )}
+              </div>
+              <p className="text-[10px] opacity-75 mt-2">Guide only — BSR % depends on category size, and your own criteria win. Make your call first, then compare.</p>
+            </div>
+
             {/* Keepa Checklist */}
             <div className="border rounded-lg p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-sm text-green-600">Keepa Checklist</h4>
-                <span className="text-xs text-muted-foreground">{checklistScore}/10 passed</span>
+                <h4 className="font-semibold text-sm text-green-600">Buy Checklist (Risk Matrix)</h4>
+                <span className="text-xs text-muted-foreground">{checklistScore}/{checklistTotal} passed</span>
               </div>
               <div className="space-y-2">
                 {CHECKLIST_ITEMS.map(item => (
@@ -322,7 +406,10 @@ export default function KeepaPage() {
                       checked={form.checklist[item.key] || false}
                       onCheckedChange={() => toggleChecklistItem(item.key)}
                     />
-                    <Label htmlFor={item.key} className="text-xs cursor-pointer leading-tight">{item.label}</Label>
+                    <Label htmlFor={item.key} className="text-xs cursor-pointer leading-tight flex-1">
+                      <span className="inline-block text-[9px] uppercase tracking-wide text-muted-foreground/70 mr-1.5 font-semibold">{item.pillar}</span>
+                      {item.label}
+                    </Label>
                   </div>
                 ))}
               </div>
